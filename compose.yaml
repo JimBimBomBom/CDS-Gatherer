@@ -1,0 +1,26 @@
+services:
+    cds-gatherer:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: cds_gatherer
+        env_file:
+            - path: "DefaultGathererEnv.env"
+              required: true
+            - path: "ProductionGathererEnv.env"
+              required: false
+        volumes:
+            - cds_data:/app/data
+        depends_on:
+            cds-app:
+                condition: service_healthy
+        networks:
+            - cdsNetwork
+        restart: unless-stopped
+
+volumes:
+    cds_data: {}
+
+networks:
+    cdsNetwork:
+        external: true
