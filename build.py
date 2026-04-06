@@ -102,7 +102,7 @@ def build_binary(platform_name: str | None = None) -> Path:
     
     # Get file size
     size_mb = output_path.stat().st_size / (1024 * 1024)
-    print(f"✓ Built {binary_name} ({size_mb:.1f} MB)")
+    print(f"[OK] Built {binary_name} ({size_mb:.1f} MB)")
     print(f"  Location: {output_path.absolute()}")
     
     return output_path
