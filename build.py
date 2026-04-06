@@ -78,8 +78,8 @@ def build_binary(platform_name: str | None = None) -> Path:
         "--hidden-import", "cityfetch.outputs.sql_generator",
         "--hidden-import", "cityfetch.outputs.json_generator",
         "--hidden-import", "cityfetch.outputs.csv_generator",
-        # Entry point
-        "cityfetch/__main__.py"
+        # Entry point - use standalone entry point with absolute imports
+        "cli_entrypoint.py"
     ]
     
     # Add icon for Windows

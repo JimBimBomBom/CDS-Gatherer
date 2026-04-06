@@ -59,6 +59,12 @@ get_interval_seconds() {
 }
 
 # Main logic
+# Check if arguments were passed (override default behavior)
+if [ $# -gt 0 ]; then
+    # Arguments provided - pass them directly to cds-cityfetch
+    exec cds-cityfetch "$@"
+fi
+
 echo "=========================================="
 echo "CDS-CityFetch Docker Container"
 echo "=========================================="

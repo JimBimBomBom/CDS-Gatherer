@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # Copy and install the application
 COPY cityfetch/ ./cityfetch/
 COPY setup.py .
+COPY README.md .
 RUN pip install --no-cache-dir --prefix=/install .
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
