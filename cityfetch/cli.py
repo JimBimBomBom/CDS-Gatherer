@@ -474,6 +474,126 @@ def cron_command(
     click.echo("=" * 60)
 
 
+@cli.command(name="pull")
+@click.argument("registry_ref")
+@click.option(
+    "--dir",
+    "output_dir",
+    default=".",
+    help="Output directory for downloaded data.",
+)
+@click.option(
+    "--token",
+    default=None,
+    help="GitHub token for authentication (or set GITHUB_TOKEN env var).",
+)
+def pull_command(registry_ref: str, output_dir: str, token: str | None) -> None:
+    """
+    Pull data artifact from OCI registry.
+    
+    REGISTRY_REF format: registry/repo:tag
+    
+    Examples:
+    
+        # Pull latest English data
+        cityfetch pull ghcr.io/filip/cds-cityfetch:en-latest
+        
+        # Pull to specific directory
+        cityfetch pull ghcr.io/filip/cds-cityfetch:de-latest --dir ./data
+    """
+    # Validate registry reference
+    if ":" not in registry_ref:
+        click.echo("Error: Invalid registry reference. Use format: registry/repo:tag", err=True)
+        click.echo("Example: ghcr.io/filip/cds-cityfetch:en-latest", err=True)
+        sys.exit(1)
+    
+    registry, tag = registry_ref.rsplit(":", 1)
+    
+    # Get token
+    auth_token = token or os.environ.get("GITHUB_TOKEN")
+    if not auth_token:
+        click.echo("Error: Authentication required. Set GITHUB_TOKEN environment variable or use --token", err=True)
+        sys.exit(1)
+    
+    try:
+        client = ORASClient(token=auth_token)
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        click.echo(f"Pulling {registry}:{tag}...")
+        data_file, metadata = client.pull(registry, tag, output_path)
+        
+        click.echo(f"✓ Successfully downloaded {data_file.name}")
+        click.echo(f"  Location: {data_file}")
+        click.echo(f"  Records: {metadata.record_count}")
+        click.echo(f"  Languages: {', '.join(metadata.languages)}")
+        click.echo(f"  Originally fetched: {metadata.fetched_at}")
+        
+        if (output_path / f"{data_file.name}.meta").exists():
+            click.echo(f"  Metadata: {output_path / f'{data_file.name}.meta'}")
+        
+    except Exception as exc:
+        click.echo(f"Error pulling from registry: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command(name="list")
+@click.argument("registry")
+@click.option(
+    "--token",
+    default=None,
+    help="GitHub token for authentication (or set GITHUB_TOKEN env var).",
+)
+def list_command(registry: str, token: str | None) -> None:
+    """
+    List available data artifacts in registry.
+    
+    REGISTRY format: registry/repo
+    
+    Example:
+    
+        cityfetch list ghcr.io/filip/cds-cityfetch
+    """
+    # Get token
+    auth_token = token or os.environ.get("GITHUB_TOKEN")
+    if not auth_token:
+        click.echo("Error: Authentication required. Set GITHUB_TOKEN environment variable or use --token", err=True)
+        sys.exit(1)
+    
+    try:
+        client = ORASClient(token=auth_token)
+        
+        click.echo(f"Listing artifacts in {registry}...")
+        tags = client.list_tags(registry)
+        
+        if not tags:
+            click.echo("No artifacts found.")
+            return
+        
+        # Group by language
+        by_language: dict[str, list[str]] = {}
+        for tag in tags:
+            lang = tag.split("-")[0] if "-" in tag else "unknown"
+            if lang not in by_language:
+                by_language[lang] = []
+            by_language[lang].append(tag)
+        
+        click.echo(f"\nFound {len(tags)} artifacts:\n")
+        
+        for lang in sorted(by_language.keys()):
+            click.echo(f"{lang}:")
+            for tag in sorted(by_language[lang]):
+                if "latest" in tag:
+                    click.echo(f"  {tag} ← current")
+                else:
+                    click.echo(f"  {tag}")
+            click.echo()
+        
+    except Exception as exc:
+        click.echo(f"Error listing registry: {exc}", err=True)
+        sys.exit(1)
+
+
 @cli.command(name="version")
 def version_command() -> None:
     """Show version information."""

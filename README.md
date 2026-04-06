@@ -397,6 +397,134 @@ Comma-separated values with headers.
 
 ---
 
+## OCI Registry (GitHub Container Registry)
+
+CDS-CityFetch can push and pull data artifacts to/from OCI-compliant registries like GitHub Container Registry (GHCR). This enables:
+
+- **Versioned datasets** – Keep historical snapshots of city data
+- **Team sharing** – Share datasets across your organization
+- **CI/CD integration** – Fetch specific data versions in your pipelines
+- **Rollback capability** – Use older data versions if needed
+
+### Setup
+
+Set your GitHub token as an environment variable:
+
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx  # Your GitHub Personal Access Token
+```
+
+Required token scopes: `read:packages`, `write:packages`, `delete:packages`
+
+### Push Data to Registry
+
+After fetching, push the result to GHCR:
+
+```bash
+# Fetch and push English data
+cityfetch fetch -l en --push --registry ghcr.io/filip/cds-cityfetch
+
+# Creates two tags:
+# - ghcr.io/filip/cds-cityfetch:en-20240412-143022 (timestamped)
+# - ghcr.io/filip/cds-cityfetch:en-latest (rolling)
+```
+
+### Pull Data from Registry
+
+Download a specific version:
+
+```bash
+# Pull latest English data
+cityfetch pull ghcr.io/filip/cds-cityfetch:en-latest --dir ./data
+
+# Pull specific timestamp
+cityfetch pull ghcr.io/filip/cds-cityfetch:en-20240412-143022 --dir ./data
+
+# Output:
+# ✓ Successfully downloaded cities.sql
+#   Location: ./data/cities.sql
+#   Records: 87432
+#   Languages: en
+#   Originally fetched: 2026-04-12T14:30:22Z
+#   Metadata: ./data/cities.sql.meta
+```
+
+### List Available Artifacts
+
+See what datasets are available:
+
+```bash
+cityfetch list ghcr.io/filip/cds-cityfetch
+
+# Output:
+# Found 6 artifacts:
+# 
+# de:
+#   de-latest ← current
+#   de-20240412-143022
+#   de-20240405-120000
+# 
+# en:
+#   en-latest ← current
+#   en-20240412-143022
+#   en-20240405-120000
+```
+
+### Client-Side Merge Workflow
+
+Merge existing registry data with fresh Wikidata fetch:
+
+```bash
+# Step 1: Pull existing data
+cityfetch pull ghcr.io/filip/cds-cityfetch:en-latest --dir ./temp
+
+# Step 2: Fetch fresh data and merge
+cityfetch fetch -l en \
+  --merge-with ./temp/cities.sql \
+  --push \
+  --registry ghcr.io/filip/cds-cityfetch
+
+# Result: New version with merged data
+```
+
+**Merge strategy:** Upsert (new data overwrites existing on duplicate CityId)
+
+### Metadata Files
+
+When pulling, a metadata sidecar file is created:
+
+```bash
+cat cities.sql.meta
+```
+
+```json
+{
+  "registry": "ghcr.io/filip/cds-cityfetch",
+  "tag": "en-20240412-143022",
+  "fetched_at": "2026-04-12T14:30:22Z",
+  "record_count": 87432,
+  "languages": ["en"],
+  "format": "sql"
+}
+```
+
+### Docker with Registry
+
+```yaml
+services:
+  cityfetch:
+    image: ghcr.io/filip/cds-cityfetch:latest
+    environment:
+      - LANGUAGES=en
+      - SCHEDULE=7DAYS
+      - PUSH_REGISTRY=ghcr.io/filip/cds-cityfetch  # Auto-push after fetch
+    volumes:
+      - ./output:/data
+    restart: unless-stopped
+```
+
+---
+
 ## Scheduled Fetching
 
 ### Docker (Easiest Method)
