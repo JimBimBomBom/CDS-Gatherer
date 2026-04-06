@@ -62,6 +62,10 @@ get_interval_seconds() {
 # Check if arguments were passed (override default behavior)
 if [ $# -gt 0 ]; then
     # Arguments provided - pass them directly to cds-cityfetch
+    # Strip 'cds-cityfetch' if it's the first arg (common user mistake)
+    if [ "$1" = "cds-cityfetch" ]; then
+        shift
+    fi
     exec cds-cityfetch "$@"
 fi
 
