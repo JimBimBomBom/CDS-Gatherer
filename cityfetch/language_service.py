@@ -1,57 +1,81 @@
 """
 language_service.py
 -------------------
-Handles language code parsing and validation.
+Predefined list of Wikidata language codes for fetching city data.
 
-Provides utilities for normalizing and validating language codes
-for use with Wikidata SPARQL queries.
+These are BCP 47 language tags that Wikidata supports for city labels.
+The list includes major world languages with substantial city coverage.
 """
 
 from __future__ import annotations
 
-import logging
-from typing import Optional
-
-logger = logging.getLogger(__name__)
-
-# Fallback language list used when no override is provided
-_FALLBACK_LANGUAGES = [
-    "en", "cs", "sk", "de", "fr", "es", "it", "pt",
-    "pl", "nl", "ru", "ja", "zh", "ar", "ko", "sv",
-    "tr", "fi", "hu", "no",
+# Comprehensive list of Wikidata language codes for city data
+# Ordered by approximate number of cities with labels (descending)
+LANGUAGE_CODES = [
+    # Major global languages with extensive coverage
+    "en",    # English
+    "de",    # German
+    "fr",    # French
+    "es",    # Spanish
+    "it",    # Italian
+    "pt",    # Portuguese
+    "pl",    # Polish
+    "nl",    # Dutch
+    "ru",    # Russian
+    "ja",    # Japanese
+    "zh",    # Chinese
+    "ar",    # Arabic
+    "ko",    # Korean
+    "sv",    # Swedish
+    "tr",    # Turkish
+    "fi",    # Finnish
+    "hu",    # Hungarian
+    "no",    # Norwegian
+    "cs",    # Czech
+    "sk",    # Slovak
+    "da",    # Danish
+    "uk",    # Ukrainian
+    "ro",    # Romanian
+    "el",    # Greek
+    "he",    # Hebrew
+    "id",    # Indonesian
+    "th",    # Thai
+    "vi",    # Vietnamese
+    "hi",    # Hindi
+    "bn",    # Bengali
+    "fa",    # Persian
+    "ms",    # Malay
+    "tl",    # Tagalog
+    "ca",    # Catalan
+    "sr",    # Serbian
+    "hr",    # Croatian
+    "bg",    # Bulgarian
+    "sl",    # Slovenian
+    "lt",    # Lithuanian
+    "lv",    # Latvian
+    "et",    # Estonian
+    "is",    # Icelandic
+    "ga",    # Irish
+    "sq",    # Albanian
+    "mk",    # Macedonian
+    "be",    # Belarusian
+    "ka",    # Georgian
+    "hy",    # Armenian
+    "az",    # Azerbaijani
+    "kk",    # Kazakh
+    "uz",    # Uzbek
+    "ta",    # Tamil
+    "te",    # Telugu
+    "mr",    # Marathi
+    "ur",    # Urdu
+    "sw",    # Swahili
+    "af",    # Afrikaans
+    "eu",    # Basque
+    "gl",    # Galician
+    "cy",    # Welsh
+    "br",    # Breton
+    "lb",    # Luxembourgish
+    "mt",    # Maltese
+    "eo",    # Esperanto
+    "la",    # Latin
 ]
-
-
-def _normalise_code(code: str) -> str:
-    """
-    Strip region subtag: 'en-US' → 'en', 'zh-Hant' → 'zh'.
-    Wikidata uses the base language tag.
-    """
-    return code.split("-")[0].lower()
-
-
-def fetch_language_codes(override: Optional[str] = None) -> list[str]:
-    """
-    Return a deduplicated, ordered list of Wikidata-compatible language codes.
-    
-    If override is provided (comma-separated like "en,de,fr"), 
-    it is parsed and returned immediately.
-    
-    Otherwise, falls back to a built-in list of common languages.
-    
-    Args:
-        override: Optional comma-separated language codes
-        
-    Returns:
-        List of normalized language codes
-    """
-    if override is not None:
-        codes = [_normalise_code(c.strip()) for c in override.split(",") if c.strip()]
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique = [c for c in codes if not (c in seen or seen.add(c))]
-        logger.info("Using language override list (%d): %s", len(unique), unique)
-        return unique
-
-    logger.info("Using fallback language list: %s", _FALLBACK_LANGUAGES)
-    return list(_FALLBACK_LANGUAGES)

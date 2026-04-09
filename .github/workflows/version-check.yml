@@ -1,0 +1,109 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for tag checking
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Extract version from code
+        id: code-version
+        run: |
+          CODE_VERSION=$(python -c "from cityfetch import __version__; print(__version__)")
+          echo "version=$CODE_VERSION" >> $GITHUB_OUTPUT
+          echo "Code version: $CODE_VERSION"
+
+      - name: Check version against git tags
+        id: tag-check
+        run: |
+          CODE_VERSION=${{ steps.code-version.outputs.version }}
+          
+          # Check if this exact version tag already exists
+          if git rev-parse "v$CODE_VERSION" >/dev/null 2>&1; then
+            echo "Tag v$CODE_VERSION already exists"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+            
+            # Get the commit that has this tag
+            TAG_COMMIT=$(git rev-parse "v$CODE_VERSION")
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            
+            if [ "$TAG_COMMIT" != "$CURRENT_COMMIT" ]; then
+              echo "ERROR: Version $CODE_VERSION is already tagged to a different commit!"
+              echo "Tagged commit: $TAG_COMMIT"
+              echo "Current commit: $CURRENT_COMMIT"
+              echo "You must bump the version before merging."
+              exit 1
+            else
+              echo "Version matches current commit - OK"
+            fi
+          else
+            echo "Tag v$CODE_VERSION does not exist yet"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate version format
+        run: |
+          CODE_VERSION=${{ steps.code-version.outputs.version }}
+          
+          # Validate semantic versioning format (X.Y.Z)
+          if ! echo "$CODE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: Version '$CODE_VERSION' does not follow semantic versioning (X.Y.Z)"
+            exit 1
+          fi
+          
+          echo "Version format is valid"
+
+      - name: Check version is bumped on PR
+        if: github.event_name == 'pull_request'
+        run: |
+          CODE_VERSION=${{ steps.code-version.outputs.version }}
+          
+          # Get the version from the base branch
+          git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+          BASE_VERSION=$(git show origin/${{ github.base_ref }}:cityfetch/__init__.py | python -c "import sys; exec(sys.stdin.read()); print(__version__)")
+          
+          echo "Base branch version: $BASE_VERSION"
+          echo "PR version: $CODE_VERSION"
+          
+          # Compare versions (simple string comparison works for semver)
+          if [ "$CODE_VERSION" = "$BASE_VERSION" ]; then
+            echo "ERROR: Version must be bumped for this PR!"
+            echo "Current version: $BASE_VERSION"
+            echo "PR version: $CODE_VERSION (same)"
+            exit 1
+          fi
+          
+          # Check that the new tag doesn't already exist
+          if git rev-parse "v$CODE_VERSION" >/dev/null 2>&1; then
+            echo "ERROR: Version $CODE_VERSION already has a tag!"
+            echo "You must use a new version number."
+            exit 1
+          fi
+          
+          echo "Version bump validated: $BASE_VERSION -> $CODE_VERSION"
+
+      - name: Report version status
+        run: |
+          echo "### Version Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Code version: **${{ steps.code-version.outputs.version }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag exists: **${{ steps.tag-check.outputs.tag_exists }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All version checks passed!" >> $GITHUB_STEP_SUMMARY

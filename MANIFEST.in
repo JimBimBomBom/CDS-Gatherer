@@ -1,5 +1,0 @@
-include README.md
-include LICENSE
-include requirements.txt
-include docker-entrypoint.sh
-recursive-include cityfetch *.py

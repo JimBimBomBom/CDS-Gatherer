@@ -1,9 +1,9 @@
 """
-CDS-CityFetch - A CLI tool for fetching city data from Wikidata.
+CDS-CityFetch - Fetch city data from Wikidata.
 
-Fetches city information from Wikidata and outputs to SQL, JSON, or CSV format.
+MVP version - Docker-only, one-shot execution.
+Fetches city data for 70+ languages from Wikidata SPARQL endpoint.
 """
 
-__version__ = "1.0.0"
+__version__ = "2.1.1"
 __author__ = "Filip Dvorak"
-__description__ = "Fetch city data from Wikidata and export to multiple formats"

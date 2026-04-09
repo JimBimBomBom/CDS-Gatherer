@@ -1,0 +1,64 @@
+name: Weekly City Data Update
+
+on:
+  schedule:
+    # Run every Sunday at 2:00 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    # Allow manual trigger
+
+env:
+  GHCR_REPOSITORY: filip/cityfetch-data
+  GHCR_REGISTRY: ghcr.io
+
+jobs:
+  fetch-and-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours for all 65 languages
+    
+    permissions:
+      contents: read
+      packages: write  # Required to push to GHCR
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Install ORAS CLI
+        run: |
+          # Install oras for OCI artifact operations
+          VERSION="1.1.0"
+          curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
+          mkdir -p oras-install/
+          tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/
+          sudo mv oras-install/oras /usr/local/bin/
+          rm -rf oras_${VERSION}_*.tar.gz oras-install/
+          oras version
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ${{ env.GHCR_REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Fetch and update city data
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_REPOSITORY: ${{ env.GHCR_REPOSITORY }}
+        run: |
+          python main.py --mode=update-artifacts
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetch-logs
+          path: output/*.log
+          retention-days: 7

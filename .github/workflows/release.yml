@@ -1,18 +1,17 @@
-name: Build and Release
+name: Build and Push Docker Image
 
 on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
-    branches:
-      - main
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-linux:
+  # First verify the tag matches the code version
+  verify-version:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,89 +22,50 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Extract version from code
+        id: code-version
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          CODE_VERSION=$(python -c "from cityfetch import __version__; print(__version__)")
+          echo "version=$CODE_VERSION" >> $GITHUB_OUTPUT
+          echo "Code version: $CODE_VERSION"
 
-      - name: Build binary
-        run: python build.py --platform linux
-
-      - name: Test binary
+      - name: Verify tag matches code version
         run: |
-          ./dist/cityfetch-linux version
-          ./dist/cityfetch-linux --help
+          TAG=${GITHUB_REF#refs/tags/}
+          CODE_VERSION=${{ steps.code-version.outputs.version }}
+          
+          echo "Git tag: $TAG"
+          echo "Code version: $CODE_VERSION"
+          
+          if [ "$TAG" != "$CODE_VERSION" ]; then
+            echo "ERROR: Git tag ($TAG) does not match code version ($CODE_VERSION)!"
+            echo "The tag MUST match the version in cityfetch/__init__.py"
+            exit 1
+          fi
+          
+          echo "✅ Tag matches code version"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cityfetch-linux
-          path: dist/cityfetch-linux
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
+      - name: Verify tag is immutable
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Build binary
-        run: python build.py --platform windows
-
-      - name: Test binary
-        run: |
-          .\dist\cityfetch-windows.exe version
-          .\dist\cityfetch-windows.exe --help
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cityfetch-windows
-          path: dist/cityfetch-windows.exe
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Build binary
-        run: python build.py --platform macos
-
-      - name: Test binary
-        run: |
-          ./dist/cityfetch-macos version
-          ./dist/cityfetch-macos --help
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cityfetch-macos
-          path: dist/cityfetch-macos
+          TAG=${GITHUB_REF#refs/tags/}
+          
+          # Check if this tag was already pushed to the registry
+          # This prevents re-tagging the same version
+          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          REGISTRY_IMAGE="${{ env.REGISTRY }}/${IMAGE_NAME}"
+          
+          # Try to pull the existing image with this tag
+          if docker pull $REGISTRY_IMAGE:$TAG 2>/dev/null; then
+            echo "ERROR: Docker image $REGISTRY_IMAGE:$TAG already exists!"
+            echo "Versions are immutable - you cannot re-release version $TAG"
+            echo "Please bump the version in cityfetch/__init__.py and create a new tag"
+            exit 1
+          fi
+          
+          echo "✅ Version $TAG is new and can be released"
 
   build-docker:
+    needs: verify-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,12 +96,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ steps.vars.outputs.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -156,34 +113,11 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm ${{ env.REGISTRY }}/${{ steps.vars.outputs.IMAGE_NAME }}:latest cds-cityfetch version
-          docker run --rm ${{ env.REGISTRY }}/${{ steps.vars.outputs.IMAGE_NAME }}:latest cds-cityfetch --help
+          docker run --rm ${{ env.REGISTRY }}/${{ steps.vars.outputs.IMAGE_NAME }}:${{ github.ref_name }} python main.py version
 
-  release:
-    needs: [build-linux, build-windows, build-macos, build-docker]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: false
-
-      - name: Display structure
-        run: ls -R dist/
-
-      - name: Create Release
+      - name: Create Release Notes
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dist/cityfetch-linux/cityfetch-linux
-            dist/cityfetch-windows/cityfetch-windows.exe
-            dist/cityfetch-macos/cityfetch-macos
-          draft: false
-          prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
